@@ -16,70 +16,61 @@ const WHITELIST = [
 ];
 const corsOptions = {
   origin: (origin, callback) => {
-    // allow requests with no origin (e.g. Postman, curl)
     if (!origin) return callback(null, true);
-
-    if (WHITELIST.includes(origin)) {
-      return callback(null, true);
-    }
-
+    if (WHITELIST.includes(origin)) return callback(null, true);
     console.warn(`Blocked CORS request from origin: ${origin}`);
     return callback(new Error("Not allowed by CORS"), false);
   },
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  methods: ["GET","POST","PUT","DELETE","OPTIONS"],
+  allowedHeaders: ["Content-Type","Authorization","X-Requested-With"],
   credentials: true,
   optionsSuccessStatus: 200,
   maxAge: 86400,
 };
-
-// apply CORS to all routes
 app.use(cors(corsOptions));
-// also handle pre-flight across the board
 app.options("*", cors(corsOptions));
 
-// parse JSON bodies
 app.use(express.json());
 
 // —— MongoDB connection —— //
 const PORT = process.env.PORT || 5000;
-const MONGODB_URI = process.env.MONGODB_URI;
-
 mongoose
-  .connect(MONGODB_URI)
+  .connect(process.env.MONGODB_URI)
   .then(() => console.log("✅ MongoDB connected"))
   .catch((err) => console.error("❌ MongoDB connection error:", err));
 
-// —— Routes —— //
+// —— Mount your routers —— //
 const recipesRoute = require("./routes/recipes");
 app.use("/recipes", recipesRoute);
 
 app.post("/ai-recipe", async (req, res) => {
-  // you no longer need to re-set CORS headers here
-  try {
-    const { ingredients } = req.body;
-    if (!Array.isArray(ingredients)) {
-      return res.status(400).json({ error: "Ingredients must be an array" });
-    }
-
-    const ingredientsString = ingredients.join(", ");
-    const response = await axios.post(process.env.N8N_WEBHOOK_URL, {
-      ingredients: ingredientsString,
-    });
-
-    return res.json({ recipe: response.data });
-  } catch (error) {
-    console.error("Error generating recipe:", {
-      message: error.message,
-      status: error.response?.status,
-      data: error.response?.data,
-    });
-    return res.status(500).json({ error: "Failed to generate recipe" });
-  }
+  // … your existing AI-recipe logic …
 });
 
 // health check
 app.get("/", (_req, res) => res.send("API is running"));
+
+// ——— DEBUG: print every registered route ———
+console.log("🔍 Registered routes:");
+app._router.stack.forEach((layer) => {
+  if (layer.route && layer.route.path) {
+    // top-level route
+    const methods = Object.keys(layer.route.methods)
+      .map(m => m.toUpperCase())
+      .join(",");
+    console.log(`  [route]  ${methods}  ${layer.route.path}`);
+  } else if (layer.name === "router" && layer.handle.stack) {
+    // mounted router
+    layer.handle.stack.forEach((handler) => {
+      if (handler.route && handler.route.path) {
+        const methods = Object.keys(handler.route.methods)
+          .map(m => m.toUpperCase())
+          .join(",");
+        console.log(`  [router] ${methods}  ${handler.route.path}`);
+      }
+    });
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
