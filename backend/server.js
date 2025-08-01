@@ -7,152 +7,80 @@ const axios = require("axios");
 
 const app = express();
 
-// Enable CORS for all routes
-app.use((req, res, next) => {
-  const allowedOrigins = [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "http://localhost:5174",
-    "https://recipe-generator-six-coral.vercel.app/"
-  ];
+// —— CORS configuration —— //
+const WHITELIST = [
+  "http://localhost:3000",
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "https://recipe-generator-six-coral.vercel.app"
+];
+const corsOptions = {
+  origin: (origin, callback) => {
+    // allow requests with no origin (e.g. Postman, curl)
+    if (!origin) return callback(null, true);
 
-  const origin = req.headers.origin;
-  console.log("Request origin:", origin);
-  console.log("Allowed origins:", allowedOrigins);
+    if (WHITELIST.includes(origin)) {
+      return callback(null, true);
+    }
 
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-    console.log("Set CORS origin to:", origin);
-  } else {
-    console.log("Origin not in allowed list:", origin);
-  }
+    console.warn(`Blocked CORS request from origin: ${origin}`);
+    return callback(new Error("Not allowed by CORS"), false);
+  },
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  credentials: true,
+  optionsSuccessStatus: 200,
+  maxAge: 86400,
+};
 
-  res.setHeader(
-    "Access-Control-Allow-Methods",
-    "GET, POST, PUT, DELETE, OPTIONS"
-  );
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Content-Type, Authorization, X-Requested-With"
-  );
-  res.setHeader("Access-Control-Allow-Credentials", "true");
-  res.setHeader("Access-Control-Max-Age", "86400");
+// apply CORS to all routes
+app.use(cors(corsOptions));
+// also handle pre-flight across the board
+app.options("*", cors(corsOptions));
 
-  // Handle preflight requests
-  if (req.method === "OPTIONS") {
-    console.log("Handling OPTIONS request");
-    res.status(200).end();
-    return;
-  }
-
-  next();
-});
-
+// parse JSON bodies
 app.use(express.json());
 
+// —— MongoDB connection —— //
 const PORT = process.env.PORT || 5000;
 const MONGODB_URI = process.env.MONGODB_URI;
 
-// Connect to MongoDB
 mongoose
-  .connect(MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log("MongoDB connected"))
-  .catch((err) => console.error("MongoDB connection error:", err));
+  .connect(MONGODB_URI)
+  .then(() => console.log("✅ MongoDB connected"))
+  .catch((err) => console.error("❌ MongoDB connection error:", err));
 
+// —— Routes —— //
 const recipesRoute = require("./routes/recipes");
 app.use("/recipes", recipesRoute);
 
-// Explicit OPTIONS handler for ai-recipe endpoint
-app.options("/ai-recipe", (req, res) => {
-  const allowedOrigins = [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "http://localhost:5174",
-    "https://recipe-generator-six-coral.vercel.app/"
-  ];
-
-  const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  }
-  res.setHeader(
-    "Access-Control-Allow-Methods",
-    "GET, POST, PUT, DELETE, OPTIONS"
-  );
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Content-Type, Authorization, X-Requested-With"
-  );
-  res.setHeader("Access-Control-Allow-Credentials", "true");
-  res.setHeader("Access-Control-Max-Age", "86400");
-
-  console.log("OPTIONS request for /ai-recipe from origin:", origin);
-  res.status(200).end();
-});
-
-// Add AI recipe generation endpoint
 app.post("/ai-recipe", async (req, res) => {
-  console.log("AI recipe endpoint hit");
-  console.log("Request headers:", req.headers);
-  console.log("Request origin:", req.headers.origin);
-
-  // Set CORS headers explicitly for this endpoint
-  const allowedOrigins = [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "http://localhost:5174",
-    "https://recipe-generator-six-coral.vercel.app/"
-  ];
-
-  const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  }
-  res.setHeader(
-    "Access-Control-Allow-Methods",
-    "GET, POST, PUT, DELETE, OPTIONS"
-  );
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Content-Type, Authorization, X-Requested-With"
-  );
-  res.setHeader("Access-Control-Allow-Credentials", "true");
-
+  // you no longer need to re-set CORS headers here
   try {
-    let { ingredients } = req.body;
-    console.log("Received ingredients:", ingredients);
-    if (!ingredients || !Array.isArray(ingredients)) {
+    const { ingredients } = req.body;
+    if (!Array.isArray(ingredients)) {
       return res.status(400).json({ error: "Ingredients must be an array" });
     }
-    // Join array into a string for n8n
-    const ingredientsString = ingredients.join(", ");
-    console.log("Sending to n8n:", ingredientsString);
-    console.log("N8N_WEBHOOK_URL:", process.env.N8N_WEBHOOK_URL);
 
-    // Send to n8n webhook
+    const ingredientsString = ingredients.join(", ");
     const response = await axios.post(process.env.N8N_WEBHOOK_URL, {
       ingredients: ingredientsString,
     });
 
-    console.log("n8n response status:", response.status);
-    console.log("n8n response data:", response.data);
-
-    // Return the recipe from n8n
-    res.json({ recipe: response.data });
+    return res.json({ recipe: response.data });
   } catch (error) {
-    console.error("Error generating recipe - Full error:", error);
-    console.error("Error message:", error.message);
-    console.error("Error response:", error.response?.data);
-    console.error("Error status:", error.response?.status);
-    res.status(500).json({ error: "Failed to generate recipe" });
+    console.error("Error generating recipe:", {
+      message: error.message,
+      status: error.response?.status,
+      data: error.response?.data,
+    });
+    return res.status(500).json({ error: "Failed to generate recipe" });
   }
 });
 
-// Health check route
-app.get("/", (req, res) => {
-  res.send("API is running");
-});
+// health check
+app.get("/", (_req, res) => res.send("API is running"));
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
 });
