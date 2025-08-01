@@ -13,9 +13,7 @@ app.use((req, res, next) => {
     "http://localhost:3000",
     "http://localhost:5173",
     "http://localhost:5174",
-    "https://recipe-app-frontend.vercel.app",
-    "https://grand-projet-omega.vercel.app",
-    "https://grand-projet-psi.vercel.app",
+    "https://recipe-generator-six-coral.vercel.app/"
   ];
 
   const origin = req.headers.origin;
@@ -70,9 +68,7 @@ app.options("/ai-recipe", (req, res) => {
     "http://localhost:3000",
     "http://localhost:5173",
     "http://localhost:5174",
-    "https://recipe-app-frontend.vercel.app",
-    "https://grand-projet-omega.vercel.app",
-    "https://grand-projet-psi.vercel.app",
+    "https://recipe-generator-six-coral.vercel.app/"
   ];
 
   const origin = req.headers.origin;
@@ -105,9 +101,7 @@ app.post("/ai-recipe", async (req, res) => {
     "http://localhost:3000",
     "http://localhost:5173",
     "http://localhost:5174",
-    "https://recipe-app-frontend.vercel.app",
-    "https://grand-projet-omega.vercel.app",
-    "https://grand-projet-psi.vercel.app",
+    "https://recipe-generator-six-coral.vercel.app/"
   ];
 
   const origin = req.headers.origin;
